@@ -1,0 +1,17 @@
+{
+  "name": "ai-daily-digest",
+  "version": "1.0.0",
+  "description": "每日 AI 资讯摘要",
+  "scripts": {
+    "harvest": "node scripts/harvest.js",
+    "translate": "node scripts/translate.js",
+    "build": "node scripts/build.js",
+    "daily": "npm run harvest && npm run translate && npm run build"
+  },
+  "dependencies": {
+    "cheerio": "^1.0.0",
+    "axios": "^1.6.0",
+    "@anthropic-ai/sdk": "^0.27.0",
+    "xml2js": "^0.6.0"
+  }
+}

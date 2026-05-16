@@ -1,0 +1,46 @@
+name: Daily AI Digest
+
+on:
+  schedule:
+    # 每天 UTC 0:00 = 北京时间 8:00
+    - cron: '0 0 * * *'
+  workflow_dispatch:
+    # 手动触发
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Harvest news
+        run: npm run harvest
+
+      - name: Translate articles
+        run: npm run translate
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+
+      - name: Build HTML
+        run: npm run build
+
+      - name: Commit output
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          git add index.html *.html
+          git diff --staged --quiet || git commit -m "Update: $(date +%Y-%m-%d)"
+          git push
