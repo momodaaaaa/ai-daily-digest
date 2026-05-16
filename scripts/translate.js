@@ -32,7 +32,7 @@ async function translateTitle(text, targetLang = 'zh') {
   return text;
 }
 
-// Groq API 生成摘要
+// Groq API 生成精炼摘要
 async function generateSummary(title, source) {
   if (!GROQ_API_KEY) {
     console.log('  ❌ GROQ_API_KEY 未设置');
@@ -45,20 +45,27 @@ async function generateSummary(title, source) {
       messages: [
         {
           role: 'system',
-          content: `你是一个专业的 AI 新闻编辑。请根据文章标题写一段 500 字左右的中文摘要，要求：
-1. 详细、有信息量
-2. 包含文章的核心内容、背景和意义
-3. 如果是技术文章，要解释关键技术
-4. 语言流畅、专业
-5. 只输出摘要内容，不要其他文字`
+          content: `你是一个专业的 AI 新闻编辑。你的任务是为一篇 AI 新闻写一段"电梯演讲"式的精炼总结：
+
+要求：
+1. 长度控制在 80-150 字左右
+2. 一句话概括文章的核心内容（这部分要占摘要的一半）
+3. 说明这个新闻的意义或影响
+4. 如果是技术文章，要用普通人能懂的话解释
+5. 不要废话，不要重复标题，不要过度解释
+
+格式示例：
+"[一句话总结] 这一进展意味着[意义/影响]"
+
+不要加标题、不要加引号、只输出摘要内容。`
         },
         {
           role: 'user',
-          content: `来源：${SOURCE_CONFIG[source]?.name || 'AI 新闻'}\n标题：${title}\n\n请写一段详细的中文摘要：`
+          content: `来源：${SOURCE_CONFIG[source]?.name || 'AI 新闻'}\n标题：${title}\n\n请写一段精炼的摘要：`
         }
       ],
-      temperature: 0.7,
-      max_tokens: 800
+      temperature: 0.5,
+      max_tokens: 300
     }, {
       headers: {
         'Authorization': `Bearer ${GROQ_API_KEY}`,
@@ -89,9 +96,9 @@ async function translateArticles(articles) {
     const translatedTitle = await translateTitle(article.title);
     console.log(`  ✅ 标题: ${translatedTitle}`);
 
-    // 生成摘要
+    // 生成精炼摘要
     const summary = await generateSummary(article.title, article.source);
-    console.log(`  ✅ 摘要: ${summary.substring(0, 50)}...`);
+    console.log(`  ✅ 摘要: ${summary.substring(0, 60)}...`);
 
     results.push({
       title: translatedTitle || article.title,
@@ -100,7 +107,7 @@ async function translateArticles(articles) {
       source: article.source
     });
 
-    await new Promise(r => setTimeout(r, 500)); // 避免请求过快
+    await new Promise(r => setTimeout(r, 500));
   }
 
   return results;
