@@ -26,24 +26,31 @@ async function translateArticle(article) {
   console.log(`📝 翻译: ${article.title.substring(0, 40)}...`);
   try {
     const response = await anthropic.messages.create({
-      model: 'claude-haiku-4-20250514',
+      model: 'claude-haiku-4',
       max_tokens: 800,
       system: SYSTEM_PROMPT,
       messages: [{ role: 'user', content: `标题: ${article.title}` }]
     });
-    const content = response.content[0].text;
+
+    const content = response.content[0].type === 'text' ? response.content[0].text : '';
+    console.log(`  原始响应: ${content.substring(0, 100)}...`);
+
     const match = content.match(/\{[\s\S]*\}/);
     if (match) {
-      const parsed = JSON.parse(match[0]);
-      return {
-        title: parsed.title || article.title,
-        summary: parsed.summary || '',
-        url: article.url,
-        source: article.source
-      };
+      try {
+        const parsed = JSON.parse(match[0]);
+        return {
+          title: parsed.title || article.title,
+          summary: parsed.summary || '暂无摘要',
+          url: article.url,
+          source: article.source
+        };
+      } catch (e) {
+        console.log('  JSON 解析失败');
+      }
     }
   } catch (e) {
-    console.log('  翻译失败');
+    console.log(`  ❌ 翻译失败: ${e.message}`);
   }
   return {
     title: article.title,
@@ -55,12 +62,21 @@ async function translateArticle(article) {
 
 async function translate() {
   console.log('🔄 开始翻译文章...\n');
+  console.log('API Key:', process.env.ANTHROPIC_API_KEY ? '已设置' : '❌ 未设置');
+
+  if (!process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_API_KEY === 'your_api_key_here') {
+    console.error('❌ API Key 未正确配置');
+    process.exit(1);
+  }
+
   if (!fs.existsSync(inputFile)) {
     console.error('❌ 请先运行 npm run harvest');
     process.exit(1);
   }
   const raw = JSON.parse(fs.readFileSync(inputFile, 'utf-8'));
   const articles = raw.articles.slice(0, 3);
+  console.log(`📊 将翻译 ${articles.length} 篇文章\n`);
+
   const results = [];
   for (const article of articles) {
     const translated = await translateArticle(article);
