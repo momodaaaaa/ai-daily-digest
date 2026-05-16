@@ -7,6 +7,9 @@ const path = require('path');
 const inputFile = path.join(__dirname, '../data/latest-raw.json');
 const outputFile = path.join(__dirname, '../data/daily-digest.json');
 
+const GROQ_API_KEY = process.env.GROQ_API_KEY;
+const GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions';
+
 const SOURCE_CONFIG = {
   hackernews: { name: 'Hacker News', color: '#ff6600' },
   reddit: { name: 'Reddit', color: '#ff4500' },
@@ -14,8 +17,8 @@ const SOURCE_CONFIG = {
   techcrunch: { name: 'TechCrunch', color: '#0a9a4d' }
 };
 
-// Google Translate API 调用（免费，无需 key）
-async function translateText(text, targetLang = 'zh-CN') {
+// Google Translate 翻译标题
+async function translateTitle(text, targetLang = 'zh') {
   try {
     const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${targetLang}&dt=t&q=${encodeURIComponent(text)}`;
     const response = await axios.get(url, { timeout: 10000 });
@@ -24,40 +27,88 @@ async function translateText(text, targetLang = 'zh-CN') {
       return data[0].map(item => item[0]).join('');
     }
   } catch (e) {
-    console.log(`  翻译失败: ${e.message}`);
+    console.log(`  标题翻译失败: ${e.message}`);
   }
-  return text; // 失败时返回原文
+  return text;
+}
+
+// Groq API 生成摘要
+async function generateSummary(title, source) {
+  if (!GROQ_API_KEY) {
+    console.log('  ❌ GROQ_API_KEY 未设置');
+    return '请查看原文获取详细信息。';
+  }
+
+  try {
+    const response = await axios.post(GROQ_API_URL, {
+      model: 'llama-3.3-70b-versatile',
+      messages: [
+        {
+          role: 'system',
+          content: `你是一个专业的 AI 新闻编辑。请根据文章标题写一段 500 字左右的中文摘要，要求：
+1. 详细、有信息量
+2. 包含文章的核心内容、背景和意义
+3. 如果是技术文章，要解释关键技术
+4. 语言流畅、专业
+5. 只输出摘要内容，不要其他文字`
+        },
+        {
+          role: 'user',
+          content: `来源：${SOURCE_CONFIG[source]?.name || 'AI 新闻'}\n标题：${title}\n\n请写一段详细的中文摘要：`
+        }
+      ],
+      temperature: 0.7,
+      max_tokens: 800
+    }, {
+      headers: {
+        'Authorization': `Bearer ${GROQ_API_KEY}`,
+        'Content-Type': 'application/json'
+      },
+      timeout: 30000
+    });
+
+    const summary = response.data?.choices?.[0]?.message?.content;
+    if (summary) {
+      return summary.trim();
+    }
+  } catch (e) {
+    console.log(`  ❌ 摘要生成失败: ${e.message}`);
+  }
+  return '请查看原文获取详细信息。';
 }
 
 async function translateArticles(articles) {
-  console.log(`📝 翻译 ${articles.length} 篇文章...\n`);
+  console.log(`📝 处理 ${articles.length} 篇文章...\n`);
 
   const results = [];
-  for (const article of articles) {
-    console.log(`  翻译: ${article.title.substring(0, 40)}...`);
+  for (let i = 0; i < articles.length; i++) {
+    const article = articles[i];
+    console.log(`\n(${i + 1}/${articles.length}) ${article.title.substring(0, 50)}...`);
 
     // 翻译标题
-    const translatedTitle = await translateText(article.title);
+    const translatedTitle = await translateTitle(article.title);
+    console.log(`  ✅ 标题: ${translatedTitle}`);
 
-    // 生成摘要（这里用标题+来源+简单的描述）
-    const summaryPrompt = `这是一篇来自 ${SOURCE_CONFIG[article.source]?.name || 'AI 新闻'} 的文章：${article.title}\n\n请用中文写一段 500 字左右的详细摘要，包含文章的核心内容、背景和意义。`;
-    const translatedSummary = await translateText(summaryPrompt);
+    // 生成摘要
+    const summary = await generateSummary(article.title, article.source);
+    console.log(`  ✅ 摘要: ${summary.substring(0, 50)}...`);
 
     results.push({
       title: translatedTitle || article.title,
-      summary: translatedSummary || '暂无摘要',
+      summary: summary,
       url: article.url,
       source: article.source
     });
 
-    await new Promise(r => setTimeout(r, 100)); // 小延迟避免请求过快
+    await new Promise(r => setTimeout(r, 500)); // 避免请求过快
   }
 
   return results;
 }
 
 async function translate() {
-  console.log('🔄 开始翻译文章...\n');
+  console.log('🔄 开始翻译和生成摘要...\n');
+  console.log('GROQ API Key:', GROQ_API_KEY ? '已设置' : '❌ 未设置');
 
   if (!fs.existsSync(inputFile)) {
     console.error('❌ 请先运行 npm run harvest');
@@ -77,7 +128,7 @@ async function translate() {
 
   fs.mkdirSync(path.dirname(outputFile), { recursive: true });
   fs.writeFileSync(outputFile, JSON.stringify(output, null, 2));
-  console.log('\n✨ 翻译完成!');
+  console.log('\n✨ 翻译和摘要生成完成!');
 }
 
 if (require.main === module) {

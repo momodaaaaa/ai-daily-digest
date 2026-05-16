@@ -34,7 +34,7 @@ jobs:
       - name: Translate articles
         run: npm run translate
         env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
 
       - name: Build HTML
         run: npm run build
